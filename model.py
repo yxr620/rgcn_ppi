@@ -32,10 +32,10 @@ class DotPredictor(nn.Module):
             return torch.sigmoid(g.edata['score'])
 
 class Model(nn.Module):
-    def __init__(self, in_feat, out_feat, num_rel, num_layer):
+    def __init__(self, in_feat, h_feat, out_feat, num_rel, num_layer):
         super(Model, self).__init__()
         self.in_feat = in_feat
-        self.h_feat = 128
+        self.h_feat = h_feat
         self.out_feat = out_feat
         self.num_rel = num_rel
         self.num_layer = num_layer

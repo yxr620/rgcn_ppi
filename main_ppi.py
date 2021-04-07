@@ -32,8 +32,7 @@ if __name__ == "__main__":
         split_data(train_path + train_file, name2id, g.number_of_nodes(), train_ratio=0.9, valid_ratio=0.1)
 
     g = g.to(dev)
-    print(g)
-    model = Model(g.ndata['feature'].shape[1], 256, 256, 2, 1).to(dev)
+    model = Model(g.ndata['feature'].shape[1], 8, 8, 2, 0).to(dev)
     # model = RelGraphConv(g.ndata['feature'].shape[1], 8, 2, low_mem=True).to(dev)
     pred = DotPredictor().to(dev)
     optimizer = torch.optim.Adam(itertools.chain(model.parameters(), pred.parameters()), lr=0.001)
@@ -43,7 +42,7 @@ if __name__ == "__main__":
         train_pos_g.edges('eid'),
         block_sampler=dgl.dataloading.MultiLayerFullNeighborSampler(2),
         negative_sampler=dgl.dataloading.negative_sampler.Uniform(1),
-        batch_size=4096,
+        batch_size=1024,
         shuffle=True,
         drop_last=False,
         pin_memory=True,
@@ -63,22 +62,29 @@ if __name__ == "__main__":
     score = 0
     for epoch in range(100):
         for input_nodes, pos_g, neg_g, blocks in trainLoader:
-            h = model(pos_g, g.ndata['feature'][pos_g.ndata['_ID']], pos_g.edata['rel_type'])
+            sub = g.subgraph(pos_g.ndata['_ID'])
+            print(f"sub\n{sub}")
+            exit()
+            h = model(sub, sub.ndata['feature'], sub.edata['rel_type'])
+            # h = model(g, g.ndata['feature'], g.edata['rel_type'])
             # print(f"input nodes{input_nodes}")
             # print(f"pos g\n{pos_g}")
             # print(f"neg g\n{neg_g}")
             # print(f"block\n{blocks}")
             # print(f"pos g id\n{pos_g.ndata['_ID']}")
             # print(f"pos nodes\n{pos_g.nodes()}")
-            # print(f"h\n{h[input_nodes.to('cpu')]}")
+            # print(f"h shape {h.shape}")
             # print(f"pos edge\n{pos_g.edges()}")
             # print(f"neg edge\n{neg_g.edges()}")
+            # pos_score = pred(pos_g, h[pos_g.ndata['_ID']])
+            # neg_score = pred(neg_g, h[neg_g.ndata['_ID']])
+
             pos_score = pred(pos_g, h)
             neg_score = pred(neg_g, h)
 
-            # print(f"embedding h\n{h}")
-            # print(f"pos {pos_score[:5]}")
-            # print(f"neg {neg_score[:5]}")
+            print(f"embedding h\n{h}")
+            print(f"pos {pos_score[:5]}")
+            print(f"neg {neg_score[:5]}")
             loss = compute_loss(pos_score, neg_score, F.binary_cross_entropy_with_logits, dev)
             optimizer.zero_grad()
             loss.backward()
@@ -89,11 +95,13 @@ if __name__ == "__main__":
 
             for input_nodes, pos_g, neg_g, blocks in validLoader:
                 with torch.no_grad():
-                    h = model(pos_g, g.ndata['feature'][pos_g.ndata['_ID']], pos_g.edata['rel_type'])
+                    sub = g.subgraph(pos_g.ndata['_ID'])
+                    h = model(sub, sub.ndata['feature'], sub.edata['rel_type'])
                     pos_score = pred(pos_g, h)
                     neg_score = pred(neg_g, h)
                     new_score = compute_auc(pos_score, neg_score)
-                    # print('AUC', new_score)
+                    print(f"epoch {epoch}, AUC {new_score}")
+
                     if score < new_score:
                         score = new_score
                         print(f"epoch {epoch} save model, score {score}")
